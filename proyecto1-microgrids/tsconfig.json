@@ -42,5 +42,6 @@
     "skipLibCheck": true,
 
     "esModuleInterop": true,
-  }
+  },
+  "exclude": ["frontend", "node_modules", "dist"]
 }

@@ -20,7 +20,7 @@ interface EstadoApi {
 }
 
 const API_URL = 'http://localhost:8082/api/state'
-const PASTO_CENTER: [number, number] = [-1.2136, -77.2811]
+const PASTO_CENTER: [number, number] = [1.2136, -77.2811]
 
 function hospitalIcon(estado: Hospital['estado']) {
   const color = estado === 'disponible' ? '#16a34a' : '#dc2626'

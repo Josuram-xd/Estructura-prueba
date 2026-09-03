@@ -38,15 +38,17 @@ public class ApiServer {
     static int tick = 0;
     static Hospital toggled = null;
 
+    // Pasto, Nariño, Colombia está en el hemisferio norte (~1.21 N, -77.28 O),
+    // no en el sur — el signo de la latitud estaba invertido.
     public static void main(String[] args) throws IOException {
-        hospitales.add(new Hospital("Hospital Universitario Departamental", -1.2136, -77.2811, 5, true));
-        hospitales.add(new Hospital("Hospital San Rafael", -1.2050, -77.2750, 2, false));
-        hospitales.add(new Hospital("Clinica Los Andes", -1.2200, -77.2850, 1, true));
+        hospitales.add(new Hospital("Hospital Universitario Departamental", 1.2136, -77.2811, 5, true));
+        hospitales.add(new Hospital("Hospital San Rafael", 1.2050, -77.2750, 2, false));
+        hospitales.add(new Hospital("Clinica Los Andes", 1.2200, -77.2850, 1, true));
 
         waypoints = new double[][] {
-            {-1.2170, -77.2900},
-            {-1.2100, -77.2700},
-            {-1.2230, -77.2780}
+            {1.2170, -77.2900},
+            {1.2100, -77.2700},
+            {1.2230, -77.2780}
         };
         ambLat = waypoints[0][0];
         ambLng = waypoints[0][1];

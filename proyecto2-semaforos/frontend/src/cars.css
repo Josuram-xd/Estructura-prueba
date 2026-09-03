@@ -1,0 +1,33 @@
+.car {
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation-name: drive;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes drive {
+  0% {
+    transform: translate(-50%, -50%) translate(0px, 0px);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--dx), var(--dy));
+    opacity: 0.2;
+  }
+}
+
+.edge-count {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  pointer-events: none;
+}

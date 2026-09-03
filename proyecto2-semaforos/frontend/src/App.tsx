@@ -1,12 +1,69 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
+  BaseEdge,
+  EdgeLabelRenderer,
   type Node,
   type Edge,
+  type EdgeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import "./cars.css";
+
+type CarEdgeData = { nivel: number; isGreen: boolean };
+
+function CarEdge({ sourceX, sourceY, targetX, targetY, style, data }: EdgeProps<Edge<CarEdgeData>>) {
+  const nivel = data?.nivel ?? 0;
+  const isGreen = data?.isGreen ?? false;
+  const path = `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2;
+
+  // La luz verde deja pasar los carros hasta el centro; en rojo se quedan
+  // haciendo fila antes de la intersección.
+  const travel = isGreen ? 1 : 0.6;
+  const duration = isGreen ? 1 : 3.5;
+  const carCount = nivel <= 0 ? 0 : Math.min(6, Math.max(1, Math.round(nivel / 3)));
+
+  return (
+    <>
+      <BaseEdge path={path} style={style} />
+      <EdgeLabelRenderer>
+        <div
+          className="edge-count"
+          style={{ position: "absolute", left: midX, top: midY, transform: "translate(-50%, -50%)" }}
+        >
+          {nivel}
+        </div>
+        {Array.from({ length: carCount }).map((_, i) => (
+          <div
+            key={i}
+            className="car"
+            style={
+              {
+                position: "absolute",
+                left: sourceX,
+                top: sourceY,
+                "--dx": `${dx * travel}px`,
+                "--dy": `${dy * travel}px`,
+                animationDuration: `${duration}s`,
+                animationDelay: `${-(i / carCount) * duration}s`,
+              } as CSSProperties
+            }
+          >
+            🚗
+          </div>
+        ))}
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+const edgeTypes = { carEdge: CarEdge };
 
 type LiveState = {
   congestion: Record<string, number>;
@@ -76,8 +133,8 @@ function buildEdges(state: LiveState | null): Edge[] {
       id: `${carril}-interseccion`,
       source: carril,
       target: "interseccion",
-      label: `${nivel}`,
-      animated: isGreen,
+      type: "carEdge",
+      data: { nivel, isGreen },
       style: {
         strokeWidth: 1 + nivel / 3,
         stroke: isGreen ? "#22c55e" : "#64748b",
@@ -121,7 +178,12 @@ export default function App() {
           Backend: {connected ? "conectado ✅" : "desconectado ❌"} (ws://localhost:8010/ws)
         </p>
       </div>
-      <ReactFlow nodes={buildNodes(state)} edges={buildEdges(state)} fitView>
+      <ReactFlow
+        nodes={buildNodes(state)}
+        edges={buildEdges(state)}
+        edgeTypes={edgeTypes}
+        fitView
+      >
         <Background color="#334155" />
         <Controls />
       </ReactFlow>
