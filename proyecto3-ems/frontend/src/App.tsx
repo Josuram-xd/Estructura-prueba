@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
@@ -13,14 +13,63 @@ interface Hospital {
   estado: 'disponible' | 'sin_cupo'
 }
 
+type EstadoAmbulancia =
+  | 'disponible'
+  | 'hacia_accidente'
+  | 'en_escena'
+  | 'en_escena_esperando_hospital'
+  | 'hacia_hospital'
+
+interface Ambulancia {
+  id: string
+  nombre: string
+  lat: number
+  lng: number
+  estado: EstadoAmbulancia
+  hospitalDestino: string | null
+}
+
+type EstadoAccidente =
+  | 'esperando_ambulancia'
+  | 'en_camino'
+  | 'esperando_hospital'
+  | 'trasladando'
+  | 'resuelto'
+
+interface Accidente {
+  lat: number
+  lng: number
+  estado: EstadoAccidente
+  ambulanciaId: string | null
+  hospitalDestino: string | null
+}
+
 interface EstadoApi {
-  ambulancia: { lat: number; lng: number }
+  tick: number
   hospitales: Hospital[]
-  hospitalElegido: string | null
+  ambulancias: Ambulancia[]
+  accidente: Accidente | null
+  eventos: string[]
 }
 
 const API_URL = 'http://localhost:8082/api/state'
 const PASTO_CENTER: [number, number] = [1.2136, -77.2811]
+
+const AMBULANCIA_LABELS: Record<EstadoAmbulancia, string> = {
+  disponible: 'disponible',
+  hacia_accidente: 'en camino al accidente',
+  en_escena: 'atendiendo en la escena',
+  en_escena_esperando_hospital: 'esperando cupo de hospital',
+  hacia_hospital: 'trasladando paciente',
+}
+
+const ACCIDENTE_LABELS: Record<EstadoAccidente, string> = {
+  esperando_ambulancia: 'esperando ambulancia disponible',
+  en_camino: 'ambulancia en camino',
+  esperando_hospital: 'esperando hospital con cupo',
+  trasladando: 'paciente en traslado',
+  resuelto: 'resuelto',
+}
 
 function hospitalIcon(estado: Hospital['estado']) {
   const color = estado === 'disponible' ? '#16a34a' : '#dc2626'
@@ -32,11 +81,22 @@ function hospitalIcon(estado: Hospital['estado']) {
   })
 }
 
-const ambulanceIcon = L.divIcon({
+function ambulanceIcon(estado: EstadoAmbulancia) {
+  const opacity = estado === 'disponible' ? 0.55 : 1
+  const pulse = estado === 'hacia_accidente' ? 'ambulance-pulse' : ''
+  return L.divIcon({
+    className: '',
+    html: `<div class="${pulse}" style="font-size:22px;line-height:22px;opacity:${opacity}">🚑</div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  })
+}
+
+const accidentIcon = L.divIcon({
   className: '',
-  html: `<div style="font-size:22px;line-height:22px">🚑</div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
+  html: `<div class="accident-pulse" style="font-size:26px;line-height:26px">💥</div>`,
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
 })
 
 function App() {
@@ -55,7 +115,7 @@ function App() {
           setEstado(data)
           setError(null)
         }
-      } catch (e) {
+      } catch {
         if (!cancelled) setError('No se pudo conectar al ApiServer en :8082. ¿Está corriendo?')
       }
     }
@@ -67,6 +127,11 @@ function App() {
       clearInterval(interval)
     }
   }, [])
+
+  const ambulanciaPorId = new Map(estado?.ambulancias.map((a) => [a.id, a]) ?? [])
+  const ambulanciaAsignada = estado?.accidente?.ambulanciaId
+    ? ambulanciaPorId.get(estado.accidente.ambulanciaId)
+    : undefined
 
   return (
     <div className="app">
@@ -96,34 +161,75 @@ function App() {
                 </Popup>
               </Marker>
             ))}
-            {estado && (
-              <Marker
-                position={[estado.ambulancia.lat, estado.ambulancia.lng]}
-                icon={ambulanceIcon}
-              >
-                <Popup>Ambulancia en ruta</Popup>
+            {estado?.ambulancias.map((a) => (
+              <Marker key={a.id} position={[a.lat, a.lng]} icon={ambulanceIcon(a.estado)}>
+                <Popup>
+                  <strong>{a.nombre}</strong>
+                  <br />
+                  Estado: {AMBULANCIA_LABELS[a.estado]}
+                  {a.hospitalDestino && (
+                    <>
+                      <br />
+                      Destino: {a.hospitalDestino}
+                    </>
+                  )}
+                </Popup>
+              </Marker>
+            ))}
+            {estado?.accidente && estado.accidente.estado !== 'resuelto' && (
+              <Circle
+                center={[estado.accidente.lat, estado.accidente.lng]}
+                radius={180}
+                pathOptions={{ color: '#dc2626', fillColor: '#dc2626', fillOpacity: 0.15 }}
+              />
+            )}
+            {estado?.accidente && (
+              <Marker position={[estado.accidente.lat, estado.accidente.lng]} icon={accidentIcon}>
+                <Popup>
+                  Accidente — {ACCIDENTE_LABELS[estado.accidente.estado]}
+                </Popup>
               </Marker>
             )}
           </MapContainer>
         </div>
         <div className="sidebar">
-          <h2>Hospital elegido</h2>
-          <div className="elegido-banner">
-            <strong>{estado?.hospitalElegido ?? '—'}</strong>
-            Seleccionado por el min-heap: especialista disponible + más camas libres.
-          </div>
+          <h2>Accidente activo</h2>
+          {estado?.accidente ? (
+            <div className={`accidente-banner ${estado.accidente.estado}`}>
+              <strong>{ACCIDENTE_LABELS[estado.accidente.estado]}</strong>
+              {ambulanciaAsignada && <div>Ambulancia: {ambulanciaAsignada.nombre}</div>}
+              {estado.accidente.hospitalDestino && (
+                <div>Hospital destino: {estado.accidente.hospitalDestino}</div>
+              )}
+            </div>
+          ) : (
+            <div className="accidente-banner sin-accidente">Sin accidentes reportados</div>
+          )}
+
+          <h2>Ambulancias</h2>
+          {estado?.ambulancias.map((a) => (
+            <div key={a.id} className={`ambulancia-card ${a.estado}`}>
+              <div className="nombre">{a.nombre}</div>
+              <span className={`badge estado-${a.estado}`}>{AMBULANCIA_LABELS[a.estado]}</span>
+              {a.hospitalDestino && <div className="destino">→ {a.hospitalDestino}</div>}
+            </div>
+          ))}
 
           <h2>Hospitales</h2>
           {estado?.hospitales.map((h) => (
-            <div
-              key={h.nombre}
-              className={`hospital-card ${h.nombre === estado.hospitalElegido ? 'elegido' : ''}`}
-            >
+            <div key={h.nombre} className="hospital-card">
               <div className="nombre">{h.nombre}</div>
               Camas libres: {h.camasLibres} · Especialista: {h.tieneEspecialista ? 'sí' : 'no'}
               <span className={`badge ${h.estado}`}>{h.estado.replace('_', ' ')}</span>
             </div>
           ))}
+
+          <h2>Eventos</h2>
+          <div className="eventos-log">
+            {estado?.eventos.map((e, i) => (
+              <div key={i} className="evento">{e}</div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

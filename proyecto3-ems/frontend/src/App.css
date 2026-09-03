@@ -104,3 +104,109 @@
   background: #fee2e2;
   color: #b91c1c;
 }
+
+.accidente-banner {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.accidente-banner strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.accidente-banner.esperando_ambulancia,
+.accidente-banner.esperando_hospital {
+  border-color: #dc2626;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.accidente-banner.en_camino,
+.accidente-banner.trasladando {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.accidente-banner.resuelto {
+  border-color: #16a34a;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.ambulancia-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.ambulancia-card .nombre {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.ambulancia-card .destino {
+  margin-top: 4px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.badge.estado-disponible {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.badge.estado-hacia_accidente {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge.estado-en_escena,
+.badge.estado-en_escena_esperando_hospital {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge.estado-hacia_hospital {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.eventos-log {
+  font-size: 12px;
+  color: #475569;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.evento {
+  padding: 4px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+@keyframes ambulance-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+
+.ambulance-pulse {
+  animation: ambulance-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes accident-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.3); }
+}
+
+.accident-pulse {
+  animation: accident-pulse 1s ease-in-out infinite;
+}

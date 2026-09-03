@@ -74,7 +74,7 @@ npm install
 npm run dev
 ```
 
-Muestra el grafo de la intersección (4 carriles → nodo central) con el grosor de cada arista según congestión y el carril con luz verde resaltado en tiempo real.
+Muestra una cuadrícula de 4 intersecciones dobles (carretera de doble sentido entre cada par de nodos, con carril central punteado) en SVG. Cada intersección tiene su propio semáforo de 2 ejes (N-S / E-O) que cicla verde → amarillo → "calculando…" → verde: en el corte "calculando" el backend decide el próximo eje y su tiempo de verde según la cola acumulada, ANTES de soltar los carros — con carros animados que hacen fila en rojo y fluyen en verde.
 
 Prueba de control en tiempo real vía TraCI (requiere [SUMO instalado](https://sumo.dlr.de/docs/Downloads.php), ej. `winget install --id EclipseFoundation.SUMO -e`):
 
@@ -121,7 +121,7 @@ npm install
 npm run dev
 ```
 
-Muestra un mapa de Pasto (tiles OpenStreetMap, sin API key) con los 3 hospitales (verde/rojo según cupo), la ambulancia moviéndose entre puntos, y un panel con el hospital elegido por el min-heap en vivo — incluye el escenario de "hospital sin cupo" cada ~16s para ver la reasignación automática.
+Muestra un mapa de Pasto (tiles OpenStreetMap, sin API key) con los 3 hospitales (verde/rojo según cupo) y 4 ambulancias en distintos puntos de la ciudad. Cada pocos segundos se reporta un accidente (💥): un min-heap por distancia asigna la ambulancia disponible más cercana, y al llegar a la escena otro min-heap por distancia elige el hospital con cupo más cercano para el traslado — con panel de estado por ambulancia y bitácora de eventos en vivo.
 
 ## Modelos de IA: propios vs. API
 

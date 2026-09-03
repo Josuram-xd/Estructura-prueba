@@ -1,8 +1,70 @@
-.car {
-  font-size: 15px;
-  line-height: 1;
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: #0f172a;
+}
+
+.app-semaforos {
+  width: 100vw;
+  height: 100vh;
+  background: #0f172a;
+  position: relative;
+  overflow: hidden;
+}
+
+.overlay {
+  position: absolute;
+  z-index: 10;
+  padding: 10px 16px;
+  color: #e2e8f0;
+  font-family: sans-serif;
+  max-width: 520px;
+}
+
+.overlay h2 {
+  margin: 0;
+}
+
+.overlay p {
+  margin: 4px 0 0;
+  opacity: 0.8;
+  font-size: 13px;
+}
+
+.overlay .legend {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.road-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.road-asphalt {
+  stroke: #334155;
+  stroke-linecap: round;
+}
+
+.road-centerline {
+  stroke: #cbd5e1;
+  stroke-width: 2;
+  stroke-dasharray: 10 10;
+  opacity: 0.5;
+}
+
+.calculando-badge {
+  fill: #facc15;
+  animation: calc-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes calc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.car-svg {
   pointer-events: none;
-  transform: translate(-50%, -50%);
   animation-name: drive;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
@@ -10,24 +72,14 @@
 
 @keyframes drive {
   0% {
-    transform: translate(-50%, -50%) translate(0px, 0px);
+    transform: translate(0px, 0px);
     opacity: 1;
   }
-  90% {
+  85% {
     opacity: 1;
   }
   100% {
-    transform: translate(-50%, -50%) translate(var(--dx), var(--dy));
-    opacity: 0.2;
+    transform: translate(var(--dx), var(--dy));
+    opacity: 0.15;
   }
-}
-
-.edge-count {
-  background: #0f172a;
-  color: #e2e8f0;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid #334155;
-  pointer-events: none;
 }
