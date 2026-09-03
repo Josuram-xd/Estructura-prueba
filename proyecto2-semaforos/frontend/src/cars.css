@@ -63,23 +63,13 @@ html, body, #root {
   50% { opacity: 0.3; }
 }
 
-.car-svg {
+.car-token {
   pointer-events: none;
-  animation-name: drive;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
+  opacity: 1;
+  transition: transform 0.9s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes drive {
-  0% {
-    transform: translate(0px, 0px);
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--dx), var(--dy));
-    opacity: 0.15;
-  }
+.car-token.car-leaving {
+  transition: transform 0.9s cubic-bezier(0.4, 0, 1, 1), opacity 0.85s ease-in 0.15s;
+  opacity: 0;
 }

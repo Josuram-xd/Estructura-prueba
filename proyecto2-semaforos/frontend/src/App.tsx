@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./cars.css";
 
 type Dir = "N" | "S" | "E" | "W";
@@ -44,8 +44,6 @@ const STUB: Record<Dir, { dx: number; dy: number }> = {
   E: { dx: 140, dy: 0 },
   W: { dx: -140, dy: 0 },
 };
-
-const AXIS_OF: Record<Dir, Fase> = { N: "NS", S: "NS", E: "EW", W: "EW" };
 
 function laneOuterPoint(nodo: Nodo, dir: Dir) {
   const vecino = NEIGHBORS[nodo][dir];
@@ -114,44 +112,161 @@ function Semaforo({ x, y, eje, color }: { x: number; y: number; eje: Fase; color
   );
 }
 
-function Carros({ nodo, dir, inter }: { nodo: Nodo; dir: Dir; inter: InterseccionState }) {
-  const cantidad = inter.colas[dir];
-  if (cantidad <= 0) return null;
+// --- Simulación de cola de autos por carril -------------------------------
+//
+// En vez de animar emojis en bucle infinito (que "flotaban" sin llegar a
+// ningún lado), cada auto es un objeto con identidad estable. Mientras el
+// semáforo de su eje está en rojo/amarillo se queda parado en su puesto de
+// la fila (más cerca del cruce = primero en salir); cuando el backend libera
+// carros de esa cola, esos autos pasan a "leaving" y una transición CSS los
+// desliza a través del cruce hasta desvanecerse. El resto de la fila se
+// recorre automáticamente porque su posición depende de su índice, y ese
+// cambio también se anima por CSS.
 
-  const isGreen = inter.fase === AXIS_OF[dir] && inter.subfase === "verde";
+type CarEstado = "queued" | "leaving";
+
+interface Car {
+  id: number;
+  estado: CarEstado;
+  leftAt?: number;
+}
+
+const CAP = 6; // máximo de autos dibujados por carril (el resto se resume en "+N")
+const STOP_OFFSET = 40; // distancia del primer auto en cola al centro del cruce
+const CAR_GAP = 20; // separación entre autos consecutivos en la fila
+const LEAVE_DIST = 55; // qué tan lejos, cruzando el nodo, se dibuja un auto que ya salió
+const LEAVE_MS = 1100; // cuánto se mantiene visible un auto "leaving" antes de limpiarlo
+const CAR_COLORS = ["#f97316", "#38bdf8", "#a3e635", "#f472b6", "#facc15", "#c084fc", "#fb7185", "#5eead4"];
+
+let carIdSeq = 0;
+const nextCarId = () => carIdSeq++;
+
+type QueuesByDir = Record<Dir, Car[]>;
+type QueuesByNodo = Record<Nodo, QueuesByDir>;
+
+function crearQueuesVacias(): QueuesByNodo {
+  const porNodo = {} as QueuesByNodo;
+  for (const nodo of NODOS) {
+    const porDir = {} as QueuesByDir;
+    for (const dir of DIRS) porDir[dir] = [];
+    porNodo[nodo] = porDir;
+  }
+  return porNodo;
+}
+
+function actualizarQueues(queues: QueuesByNodo, nuevoEstado: LiveState) {
+  const ahora = Date.now();
+  for (const nodo of NODOS) {
+    for (const dir of DIRS) {
+      let fila = queues[nodo][dir];
+      fila = fila.filter((c) => c.estado !== "leaving" || ahora - (c.leftAt ?? 0) < LEAVE_MS);
+
+      const cantidad = nuevoEstado.intersecciones[nodo].colas[dir];
+      const objetivoVisible = Math.min(cantidad, CAP);
+      const enCola = fila.filter((c) => c.estado === "queued").length;
+      const diff = objetivoVisible - enCola;
+
+      if (diff > 0) {
+        for (let i = 0; i < diff; i++) fila.push({ id: nextCarId(), estado: "queued" });
+      } else if (diff < 0) {
+        let porQuitar = -diff;
+        for (let i = 0; i < fila.length && porQuitar > 0; i++) {
+          if (fila[i].estado === "queued") {
+            fila[i] = { ...fila[i], estado: "leaving", leftAt: ahora };
+            porQuitar--;
+          }
+        }
+      }
+      queues[nodo][dir] = fila;
+    }
+  }
+}
+
+function CarShape({ x, y, angleDeg, color, leaving }: { x: number; y: number; angleDeg: number; color: string; leaving: boolean }) {
+  return (
+    <g
+      className={`car-token${leaving ? " car-leaving" : ""}`}
+      style={{ transform: `translate(${x}px, ${y}px) rotate(${angleDeg}deg)` }}
+    >
+      <rect x={-8} y={-5} width={16} height={10} rx={3} fill={color} stroke="#0f172a" strokeWidth={1} />
+      <rect x={2.5} y={-4} width={4} height={3} rx={0.5} fill="#e0f2fe" opacity={0.9} />
+      <rect x={2.5} y={1} width={4} height={3} rx={0.5} fill="#e0f2fe" opacity={0.9} />
+    </g>
+  );
+}
+
+function StopLine({ nodo, dir }: { nodo: Nodo; dir: Dir }) {
   const { x: x1, y: y1 } = laneOuterPoint(nodo, dir);
   const { x: x2, y: y2 } = CENTERS[nodo];
-  const travel = isGreen ? 0.95 : 0.6;
-  const duration = isGreen ? 1.1 : 3.2;
-  const carCount = Math.min(4, Math.max(1, Math.round(cantidad / 4)));
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const dist = STOP_OFFSET - 8;
+  const cx = x2 - ux * dist + px * 7;
+  const cy = y2 - uy * dist + py * 7;
+  const angle = (Math.atan2(uy, ux) * 180) / Math.PI + 90;
+  return <rect x={-9} y={-1.5} width={18} height={3} rx={1} fill="#e2e8f0" opacity={0.5} transform={`translate(${cx},${cy}) rotate(${angle})`} />;
+}
+
+function Carros({ nodo, dir, inter, fila }: { nodo: Nodo; dir: Dir; inter: InterseccionState; fila: Car[] }) {
+  const cantidad = inter.colas[dir];
+  const overflow = Math.max(0, cantidad - CAP);
+  if (fila.length === 0 && overflow === 0) return null;
+
+  const { x: x1, y: y1 } = laneOuterPoint(nodo, dir);
+  const { x: x2, y: y2 } = CENTERS[nodo];
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const laneOffset = 7;
+  const angleDeg = (Math.atan2(uy, ux) * 180) / Math.PI;
+
+  let queuedIdx = 0;
+  const puestos = fila.map((car) => {
+    const dist = car.estado === "queued" ? STOP_OFFSET + queuedIdx++ * CAR_GAP : -LEAVE_DIST;
+    const cx = x2 - ux * dist + px * laneOffset;
+    const cy = y2 - uy * dist + py * laneOffset;
+    return { car, cx, cy };
+  });
+
+  const ultimo = puestos[puestos.length - 1];
 
   return (
     <>
-      {Array.from({ length: carCount }).map((_, i) => (
-        <text
-          key={i}
-          x={x1}
-          y={y1}
-          fontSize={16}
-          textAnchor="middle"
-          className="car-svg"
-          style={
-            {
-              "--dx": `${(x2 - x1) * travel}px`,
-              "--dy": `${(y2 - y1) * travel}px`,
-              animationDuration: `${duration}s`,
-              animationDelay: `${-(i / carCount) * duration}s`,
-            } as React.CSSProperties
-          }
-        >
-          🚗
-        </text>
+      {puestos.map(({ car, cx, cy }) => (
+        <CarShape
+          key={car.id}
+          x={cx}
+          y={cy}
+          angleDeg={angleDeg}
+          color={CAR_COLORS[car.id % CAR_COLORS.length]}
+          leaving={car.estado === "leaving"}
+        />
       ))}
+      {overflow > 0 && (
+        <text
+          x={ultimo ? ultimo.cx - ux * CAR_GAP : x2 - ux * STOP_OFFSET}
+          y={ultimo ? ultimo.cy - uy * CAR_GAP : y2 - uy * STOP_OFFSET}
+          fontSize={10}
+          fill="#94a3b8"
+          textAnchor="middle"
+        >
+          +{overflow}
+        </text>
+      )}
     </>
   );
 }
 
-function Interseccion({ nodo, inter }: { nodo: Nodo; inter: InterseccionState }) {
+function Interseccion({ nodo, inter, queues }: { nodo: Nodo; inter: InterseccionState; queues: QueuesByDir }) {
   const c = CENTERS[nodo];
   const nsOff = SEMAFORO_OFFSET.NS;
   const ewOff = SEMAFORO_OFFSET.EW;
@@ -159,6 +274,9 @@ function Interseccion({ nodo, inter }: { nodo: Nodo; inter: InterseccionState })
 
   return (
     <g>
+      {DIRS.map((dir) => (
+        <StopLine key={dir} nodo={nodo} dir={dir} />
+      ))}
       <rect x={c.x - 24} y={c.y - 24} width={48} height={48} rx={10} fill="#1f2937" stroke="#475569" />
       <text x={c.x} y={c.y + 5} fontSize={11} fill="#e2e8f0" textAnchor="middle" fontWeight={600}>
         {nodo}
@@ -167,14 +285,14 @@ function Interseccion({ nodo, inter }: { nodo: Nodo; inter: InterseccionState })
       <Semaforo x={c.x + ewOff.dx} y={c.y + ewOff.dy} eje="EW" color={axisColor(inter, "EW")} />
       {calculando && (
         <text x={c.x} y={c.y - 42} fontSize={11} textAnchor="middle" className="calculando-badge">
-          🧮 calculando siguiente fase…
+          calculando siguiente fase…
         </text>
       )}
       <text x={c.x} y={c.y + 44} fontSize={10} fill="#94a3b8" textAnchor="middle">
         {inter.fase} {SUBFASE_LABEL[inter.subfase]} · {inter.restante}t
       </text>
       {DIRS.map((dir) => (
-        <Carros key={dir} nodo={nodo} dir={dir} inter={inter} />
+        <Carros key={dir} nodo={nodo} dir={dir} inter={inter} fila={queues[dir]} />
       ))}
     </g>
   );
@@ -183,13 +301,18 @@ function Interseccion({ nodo, inter }: { nodo: Nodo; inter: InterseccionState })
 export default function App() {
   const [state, setState] = useState<LiveState | null>(null);
   const [connected, setConnected] = useState(false);
+  const [queues, setQueues] = useState<QueuesByNodo>(crearQueuesVacias());
+  const queuesRef = useRef<QueuesByNodo>(queues);
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8010/ws");
     ws.onopen = () => setConnected(true);
     ws.onclose = () => setConnected(false);
     ws.onmessage = (ev) => {
-      setState(JSON.parse(ev.data) as LiveState);
+      const nuevoEstado = JSON.parse(ev.data) as LiveState;
+      actualizarQueues(queuesRef.current, nuevoEstado);
+      setState(nuevoEstado);
+      setQueues({ ...queuesRef.current });
     };
     return () => ws.close();
   }, []);
@@ -212,7 +335,8 @@ export default function App() {
         </p>
         <p className="legend">
           🔴 rojo · 🟡 amarillo (transición) · 🟢 verde — cada semáforo calcula el
-          tiempo de verde según la cola ANTES de soltar los carros.
+          tiempo de verde según la cola ANTES de soltar los carros. Los autos se
+          acumulan detrás de la línea de pare y cruzan cuando su eje está en verde.
         </p>
       </div>
       <svg viewBox="0 0 920 760" className="road-svg">
@@ -230,7 +354,9 @@ export default function App() {
           </g>
         ))}
         {state &&
-          NODOS.map((nodo) => <Interseccion key={nodo} nodo={nodo} inter={state.intersecciones[nodo]} />)}
+          NODOS.map((nodo) => (
+            <Interseccion key={nodo} nodo={nodo} inter={state.intersecciones[nodo]} queues={queues[nodo]} />
+          ))}
       </svg>
     </div>
   );
