@@ -21,7 +21,9 @@ Los comandos abajo están en sintaxis de **PowerShell** (no uses `&&` entre lín
 
 ## Proyecto 1 — Microgrids (`proyecto1-microgrids/`)
 
-Stack: Node.js + Express + Socket.io + TypeScript + ONNX Runtime Web.
+Stack: Node.js + Express + Socket.io + TypeScript + ONNX Runtime Web. Frontend: React + TypeScript + Recharts.
+
+Backend (puerto 4001, corre indefinidamente con simulación en vivo de nubosidad/heap):
 
 ```powershell
 cd proyecto1-microgrids
@@ -29,6 +31,16 @@ npm install
 npx tsc
 node dist/server.js
 ```
+
+Frontend (puerto 5173 por defecto), en otra terminal:
+
+```powershell
+cd proyecto1-microgrids/frontend
+npm install
+npm run dev
+```
+
+Muestra el heap de dispositivos reordenándose en vivo (rojo/amarillo/verde por urgencia) y una gráfica de energía generada vs. consumida, ambos vía Socket.io.
 
 Prueba de inferencia del modelo solar (`solar_model.onnx`, entrenado con `train_solar_model.py`):
 
@@ -39,14 +51,30 @@ node test_inference.mjs
 
 ## Proyecto 2 — Semáforos (`proyecto2-semaforos/`)
 
-Stack: Python + FastAPI + scikit-learn + Gymnasium/Stable-Baselines3 (RL) + SUMO/TraCI.
+Stack: Python + FastAPI + scikit-learn + Gymnasium/Stable-Baselines3 (RL) + SUMO/TraCI. Frontend: React + TypeScript + `@xyflow/react` (React Flow).
 
 ```powershell
 cd proyecto2-semaforos
 pip install fastapi "uvicorn[standard]" httpx scikit-learn gymnasium stable-baselines3 traci sumolib
-python main.py
 python test_ia_opciones.py
 ```
+
+Servidor en vivo (puerto 8010, WebSocket en `/ws` con congestión simulada cada 1.5s):
+
+```powershell
+cd proyecto2-semaforos
+python main.py
+```
+
+Frontend (puerto 5173 por defecto), en otra terminal:
+
+```powershell
+cd proyecto2-semaforos/frontend
+npm install
+npm run dev
+```
+
+Muestra el grafo de la intersección (4 carriles → nodo central) con el grosor de cada arista según congestión y el carril con luz verde resaltado en tiempo real.
 
 Prueba de control en tiempo real vía TraCI (requiere [SUMO instalado](https://sumo.dlr.de/docs/Downloads.php), ej. `winget install --id EclipseFoundation.SUMO -e`):
 
@@ -60,7 +88,9 @@ Nota: `grid.net.xml` es una red de prueba genérica sin semáforos (TLS) configu
 
 ## Proyecto 3 — Smart EMS (`proyecto3-ems/`)
 
-Stack: Java puro (versión mínima sin Spring Boot). El proyecto real usaría Java 17 + Spring Boot 3.x (Web + WebSocket + Spring Data JPA + PostgreSQL).
+Stack: Java puro (versión mínima sin Spring Boot). El proyecto real usaría Java 17 + Spring Boot 3.x (Web + WebSocket + Spring Data JPA + PostgreSQL). Frontend: React + TypeScript + Leaflet.
+
+Prueba de consola del min-heap de hospitales:
 
 ```powershell
 cd proyecto3-ems
@@ -74,6 +104,24 @@ Si tienes más de un JDK instalado y `java`/`javac` no coinciden en versión, us
 & "C:\Program Files\Java\jdk-24\bin\javac" src\Main.java -d out
 & "C:\Program Files\Java\jdk-24\bin\java" -cp out Main
 ```
+
+Servidor en vivo para el frontend (`ApiServer.java`, sin dependencias externas — usa `com.sun.net.httpserver` del propio JDK, puerto 8082, endpoint `GET /api/state` con polling):
+
+```powershell
+cd proyecto3-ems
+& "C:\Program Files\Java\jdk-24\bin\javac" src\Main.java src\ApiServer.java -d out
+& "C:\Program Files\Java\jdk-24\bin\java" -cp out ApiServer
+```
+
+Frontend (puerto 5173 por defecto), en otra terminal:
+
+```powershell
+cd proyecto3-ems/frontend
+npm install
+npm run dev
+```
+
+Muestra un mapa de Pasto (tiles OpenStreetMap, sin API key) con los 3 hospitales (verde/rojo según cupo), la ambulancia moviéndose entre puntos, y un panel con el hospital elegido por el min-heap en vivo — incluye el escenario de "hospital sin cupo" cada ~16s para ver la reasignación automática.
 
 ## Modelos de IA: propios vs. API
 

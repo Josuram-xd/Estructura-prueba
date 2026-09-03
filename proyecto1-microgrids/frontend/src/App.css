@@ -1,0 +1,105 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #121212;
+  color: #eee;
+  font-family: system-ui, sans-serif;
+}
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.status {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.status.ok {
+  background: #1a3d2e;
+  color: #30a46c;
+}
+
+.status.down {
+  background: #3d1a1a;
+  color: #e5484d;
+}
+
+.panel {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.panel h2 {
+  font-size: 1rem;
+  margin-top: 0;
+  color: #ccc;
+}
+
+.heap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.heap-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #202020;
+  border-left: 4px solid #666;
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+.heap-list li.top {
+  box-shadow: 0 0 0 1px #30a46c66;
+}
+
+.device-id {
+  font-weight: 600;
+  flex: 1;
+}
+
+.device-tier {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.device-score {
+  font-variant-numeric: tabular-nums;
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  background: #1a3d2e;
+  color: #30a46c;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
