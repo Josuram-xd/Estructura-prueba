@@ -181,6 +181,69 @@
   color: #1d4ed8;
 }
 
+.guia-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.guia-panel ol {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.guia-panel li {
+  margin-bottom: 4px;
+}
+
+.paso-hecho {
+  color: #16a34a;
+  text-decoration: line-through;
+}
+
+.paso-actual {
+  color: #92400e;
+  font-weight: 600;
+}
+
+.paso-pendiente {
+  color: #94a3b8;
+}
+
+.paso-sugerido {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 12px;
+  color: #475569;
+}
+
+.resumen-panel {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  background: #eff6ff;
+}
+
+.resumen-panel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.resumen-panel li {
+  margin-bottom: 3px;
+}
+
+.resumen-vacio {
+  color: #94a3b8;
+  font-style: italic;
+}
+
 .eventos-log {
   font-size: 12px;
   color: #475569;

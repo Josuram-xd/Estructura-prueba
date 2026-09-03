@@ -7,10 +7,14 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-// Simulación de coordinación de emergencias: cuando se reporta un accidente,
-// un min-heap ordena las ambulancias disponibles por distancia (la más cercana
-// responde) y, al llegar a la escena, otro min-heap ordena los hospitales con
-// cupo disponible por distancia (el más cercano con disponibilidad la recibe).
+// Simulación de coordinación de emergencias unificada (evita el "paseo de la muerte"):
+// 1) un min-heap ordena las ambulancias disponibles por distancia (la más cercana responde),
+// 2) una IA de reglas (guía de primeros auxilios) le indica al paramédico el siguiente paso
+//    del protocolo según el tipo de caso, y cada paso queda registrado en un FIFO clínico,
+// 3) un min-heap rankea los hospitales candidatos por score (especialista requerido +
+//    cupo disponible + distancia) para elegir destino sin depender de llamadas de confirmación,
+// 4) el resumen clínico (FIFO) se envía al hospital elegido apenas se asigna, antes de que
+//    la ambulancia llegue físicamente, para que el médico receptor sepa qué se hizo en ruta.
 public class ApiServer {
 
     static class Hospital {
@@ -18,15 +22,15 @@ public class ApiServer {
         double lat, lng;
         int camasLibres;
         int camasLibresBase;
-        boolean tieneEspecialista;
+        String especialidad; // especialidad principal disponible en este hospital
 
-        Hospital(String nombre, double lat, double lng, int camasLibres, boolean tieneEspecialista) {
+        Hospital(String nombre, double lat, double lng, int camasLibres, String especialidad) {
             this.nombre = nombre;
             this.lat = lat;
             this.lng = lng;
             this.camasLibres = camasLibres;
             this.camasLibresBase = camasLibres;
-            this.tieneEspecialista = tieneEspecialista;
+            this.especialidad = especialidad;
         }
 
         String estado() {
@@ -52,16 +56,54 @@ public class ApiServer {
         }
     }
 
+    // Protocolos de primeros auxilios (guía asistida, tipo checklist que avanza solo,
+    // basado en referencias estándar como las guías de la American Heart Association).
+    static final Map<String, String[]> PROTOCOLOS = new LinkedHashMap<>();
+    static {
+        PROTOCOLOS.put("Trauma", new String[]{
+            "Verificar vía aérea permeable",
+            "Controlar sangrado activo con presión directa",
+            "Inmovilizar cuello y columna",
+            "Canalizar vía IV",
+            "Monitorizar signos vitales",
+        });
+        PROTOCOLOS.put("Cardiología", new String[]{
+            "Evaluar consciencia y pulso",
+            "Administrar oxígeno (SatO2 < 94%)",
+            "Conectar monitor/desfibrilador",
+            "Administrar aspirina (sin contraindicación)",
+            "Monitorizar ritmo cardiaco",
+        });
+        PROTOCOLOS.put("Neumología", new String[]{
+            "Sentar en posición semi-Fowler",
+            "Administrar oxígeno suplementario",
+            "Evaluar frecuencia respiratoria",
+            "Preparar nebulización si aplica",
+            "Monitorizar SatO2 continuamente",
+        });
+    }
+    static final String[] ESPECIALIDADES = PROTOCOLOS.keySet().toArray(new String[0]);
+
     static class Accidente {
         double lat, lng;
         // esperando_ambulancia | en_camino | esperando_hospital | trasladando | resuelto
         String estado = "esperando_ambulancia";
         String ambulanciaId = null;
         String hospitalDestino = null;
+        String especialistaRequerido;
+        String[] guiaPasos;
+        int pasoActual = 0;
+        final List<String> resumenClinico = new ArrayList<>(); // FIFO de procedimientos realizados
 
-        Accidente(double lat, double lng) {
+        Accidente(double lat, double lng, String especialistaRequerido) {
             this.lat = lat;
             this.lng = lng;
+            this.especialistaRequerido = especialistaRequerido;
+            this.guiaPasos = PROTOCOLOS.get(especialistaRequerido);
+        }
+
+        String siguientePaso() {
+            return pasoActual < guiaPasos.length ? guiaPasos[pasoActual] : null;
         }
     }
 
@@ -79,9 +121,9 @@ public class ApiServer {
     static final double LNG_MIN = -77.298, LNG_MAX = -77.268;
 
     public static void main(String[] args) throws IOException {
-        hospitales.add(new Hospital("Hospital Universitario Departamental", 1.2136, -77.2811, 5, true));
-        hospitales.add(new Hospital("Hospital San Rafael", 1.2050, -77.2750, 2, false));
-        hospitales.add(new Hospital("Clinica Los Andes", 1.2200, -77.2850, 1, true));
+        hospitales.add(new Hospital("Hospital Universitario Departamental", 1.2136, -77.2811, 5, "Trauma"));
+        hospitales.add(new Hospital("Hospital San Rafael", 1.2050, -77.2750, 2, "Cardiología"));
+        hospitales.add(new Hospital("Clinica Los Andes", 1.2200, -77.2850, 1, "Neumología"));
 
         ambulancias.add(new Ambulancia("A1", "Ambulancia 1", 1.1990, -77.2950));
         ambulancias.add(new Ambulancia("A2", "Ambulancia 2", 1.2250, -77.2660));
@@ -116,6 +158,8 @@ public class ApiServer {
                 if (moveTowards(a)) handleArrival(a);
             }
         }
+
+        avanzarGuiaPrimerosAuxilios();
 
         if (accidenteActual == null || accidenteActual.estado.equals("resuelto")) {
             if (cooldownRestante > 0) {
@@ -166,7 +210,8 @@ public class ApiServer {
         } else if (a.estado.equals("hacia_hospital")) {
             Hospital h = buscarHospital(a.hospitalDestino);
             if (h != null && h.camasLibres > 0) h.camasLibres--;
-            log(a.nombre + " entregó al paciente en " + (h == null ? a.hospitalDestino : h.nombre));
+            log(a.nombre + " entregó al paciente en " + (h == null ? a.hospitalDestino : h.nombre)
+                + " — historial ya estaba en poder del médico receptor");
             a.estado = "disponible";
             a.hospitalDestino = null;
             if (accidenteActual != null && a.id.equals(accidenteActual.ambulanciaId)) {
@@ -175,7 +220,8 @@ public class ApiServer {
         }
     }
 
-    // Min-heap por distancia: la ambulancia disponible más cercana al accidente responde.
+    // Min-heap por distancia: la ambulancia disponible más cercana al accidente responde
+    // (minimiza el tiempo de llegada en lugar de despachar por orden de turno).
     static void asignarAmbulanciaMasCercana() {
         final double aLat = accidenteActual.lat, aLng = accidenteActual.lng;
         PriorityQueue<Ambulancia> heap = new PriorityQueue<>(
@@ -195,10 +241,35 @@ public class ApiServer {
         log(elegida.nombre + " asignada al accidente (más cercana disponible)");
     }
 
-    // Min-heap por distancia entre los hospitales CON cupo: el más cercano con disponibilidad recibe al paciente.
+    // Guía de primeros auxilios asistida: un checklist basado en el tipo de caso avanza solo,
+    // un paso por tick, mientras el paciente está en manos del paramédico. Cada paso realizado
+    // se encola en el resumen clínico (FIFO) que ya viaja hacia el hospital elegido.
+    static void avanzarGuiaPrimerosAuxilios() {
+        if (accidenteActual == null) return;
+        Accidente ac = accidenteActual;
+        if (ac.ambulanciaId == null) return;
+        boolean pacienteEnAtencion = ac.estado.equals("en_camino") || ac.estado.equals("esperando_hospital")
+            || ac.estado.equals("trasladando");
+        if (!pacienteEnAtencion) return;
+
+        String paso = ac.siguientePaso();
+        if (paso == null) return;
+
+        ac.pasoActual++;
+        ac.resumenClinico.add(paso);
+        Ambulancia a = buscarAmbulancia(ac.ambulanciaId);
+        String nombreAmb = a != null ? a.nombre : ac.ambulanciaId;
+        log("IA sugiere a " + nombreAmb + ": " + paso);
+    }
+
+    // Min-heap por score de idoneidad: prioriza el hospital que tenga el especialista requerido
+    // Y cupo disponible sobre el simplemente más cercano — así se evita el "paseo de la muerte"
+    // (llegar a un hospital y que toque redirigir a otro porque no puede recibir al paciente).
     static void intentarAsignarHospital(Ambulancia a) {
+        final String especialidadReq = accidenteActual != null ? accidenteActual.especialistaRequerido : null;
         PriorityQueue<Hospital> heap = new PriorityQueue<>(
-            Comparator.comparingDouble((Hospital h) -> distancia(a.lat, a.lng, h.lat, h.lng))
+            Comparator.<Hospital>comparingInt(h -> h.especialidad.equals(especialidadReq) ? 0 : 1)
+                      .thenComparingDouble(h -> distancia(a.lat, a.lng, h.lat, h.lng))
         );
         for (Hospital h : hospitales) {
             if (h.camasLibres > 0) heap.add(h);
@@ -210,6 +281,7 @@ public class ApiServer {
         }
 
         Hospital elegido = heap.poll();
+        boolean tieneEspecialista = elegido.especialidad.equals(especialidadReq);
         a.estado = "hacia_hospital";
         a.targetLat = elegido.lat;
         a.targetLng = elegido.lng;
@@ -218,14 +290,17 @@ public class ApiServer {
             accidenteActual.estado = "trasladando";
             accidenteActual.hospitalDestino = elegido.nombre;
         }
-        log(a.nombre + " traslada al paciente a " + elegido.nombre + " (más cercano con cupo)");
+        log(a.nombre + " traslada al paciente a " + elegido.nombre
+            + (tieneEspecialista ? " (tiene " + especialidadReq + " y cupo)" : " (más cercano con cupo; sin " + especialidadReq + ")")
+            + " — notificación anticipada con resumen clínico enviada");
     }
 
     static void spawnAccidente() {
         double lat = LAT_MIN + rng.nextDouble() * (LAT_MAX - LAT_MIN);
         double lng = LNG_MIN + rng.nextDouble() * (LNG_MAX - LNG_MIN);
-        accidenteActual = new Accidente(lat, lng);
-        log("Nuevo accidente reportado");
+        String especialidad = ESPECIALIDADES[rng.nextInt(ESPECIALIDADES.length)];
+        accidenteActual = new Accidente(lat, lng, especialidad);
+        log("Nuevo accidente reportado — requiere " + especialidad);
     }
 
     static void descargarPacienteAleatorio() {
@@ -241,6 +316,11 @@ public class ApiServer {
 
     static Hospital buscarHospital(String nombre) {
         for (Hospital h : hospitales) if (h.nombre.equals(nombre)) return h;
+        return null;
+    }
+
+    static Ambulancia buscarAmbulancia(String id) {
+        for (Ambulancia a : ambulancias) if (a.id.equals(id)) return a;
         return null;
     }
 
@@ -280,7 +360,7 @@ public class ApiServer {
               .append("\"lat\":").append(h.lat).append(",")
               .append("\"lng\":").append(h.lng).append(",")
               .append("\"camasLibres\":").append(h.camasLibres).append(",")
-              .append("\"tieneEspecialista\":").append(h.tieneEspecialista).append(",")
+              .append("\"especialidad\":\"").append(escape(h.especialidad)).append("\",")
               .append("\"estado\":\"").append(h.estado()).append("\"")
               .append("}");
         }
@@ -305,12 +385,29 @@ public class ApiServer {
         if (accidenteActual == null) {
             sb.append("null");
         } else {
+            Accidente ac = accidenteActual;
+            String siguientePaso = ac.siguientePaso();
             sb.append("{")
-              .append("\"lat\":").append(accidenteActual.lat).append(",")
-              .append("\"lng\":").append(accidenteActual.lng).append(",")
-              .append("\"estado\":\"").append(accidenteActual.estado).append("\",")
-              .append("\"ambulanciaId\":").append(accidenteActual.ambulanciaId == null ? "null" : "\"" + escape(accidenteActual.ambulanciaId) + "\"").append(",")
-              .append("\"hospitalDestino\":").append(accidenteActual.hospitalDestino == null ? "null" : "\"" + escape(accidenteActual.hospitalDestino) + "\"")
+              .append("\"lat\":").append(ac.lat).append(",")
+              .append("\"lng\":").append(ac.lng).append(",")
+              .append("\"estado\":\"").append(ac.estado).append("\",")
+              .append("\"ambulanciaId\":").append(ac.ambulanciaId == null ? "null" : "\"" + escape(ac.ambulanciaId) + "\"").append(",")
+              .append("\"hospitalDestino\":").append(ac.hospitalDestino == null ? "null" : "\"" + escape(ac.hospitalDestino) + "\"").append(",")
+              .append("\"especialistaRequerido\":\"").append(escape(ac.especialistaRequerido)).append("\",")
+              .append("\"siguientePaso\":").append(siguientePaso == null ? "null" : "\"" + escape(siguientePaso) + "\"").append(",")
+              .append("\"guiaPasos\":[");
+            for (int i = 0; i < ac.guiaPasos.length; i++) {
+                if (i > 0) sb.append(",");
+                sb.append("\"").append(escape(ac.guiaPasos[i])).append("\"");
+            }
+            sb.append("],")
+              .append("\"pasoActual\":").append(ac.pasoActual).append(",")
+              .append("\"resumenClinico\":[");
+            for (int i = 0; i < ac.resumenClinico.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append("\"").append(escape(ac.resumenClinico.get(i))).append("\"");
+            }
+            sb.append("]")
               .append("}");
         }
         sb.append(",");

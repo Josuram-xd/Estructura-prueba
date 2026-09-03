@@ -9,7 +9,7 @@ interface Hospital {
   lat: number
   lng: number
   camasLibres: number
-  tieneEspecialista: boolean
+  especialidad: string
   estado: 'disponible' | 'sin_cupo'
 }
 
@@ -42,6 +42,11 @@ interface Accidente {
   estado: EstadoAccidente
   ambulanciaId: string | null
   hospitalDestino: string | null
+  especialistaRequerido: string
+  siguientePaso: string | null
+  guiaPasos: string[]
+  pasoActual: number
+  resumenClinico: string[]
 }
 
 interface EstadoApi {
@@ -155,7 +160,7 @@ function App() {
                   <br />
                   Camas libres: {h.camasLibres}
                   <br />
-                  Especialista: {h.tieneEspecialista ? 'sí' : 'no'}
+                  Especialidad: {h.especialidad}
                   <br />
                   Estado: {h.estado}
                 </Popup>
@@ -197,6 +202,7 @@ function App() {
           {estado?.accidente ? (
             <div className={`accidente-banner ${estado.accidente.estado}`}>
               <strong>{ACCIDENTE_LABELS[estado.accidente.estado]}</strong>
+              <div>Requiere: {estado.accidente.especialistaRequerido}</div>
               {ambulanciaAsignada && <div>Ambulancia: {ambulanciaAsignada.nombre}</div>}
               {estado.accidente.hospitalDestino && (
                 <div>Hospital destino: {estado.accidente.hospitalDestino}</div>
@@ -204,6 +210,48 @@ function App() {
             </div>
           ) : (
             <div className="accidente-banner sin-accidente">Sin accidentes reportados</div>
+          )}
+
+          {estado?.accidente && (
+            <>
+              <h2>Guía de primeros auxilios (IA)</h2>
+              <div className="guia-panel">
+                <ol>
+                  {estado.accidente.guiaPasos.map((paso, i) => (
+                    <li
+                      key={i}
+                      className={
+                        i < estado!.accidente!.pasoActual
+                          ? 'paso-hecho'
+                          : i === estado!.accidente!.pasoActual
+                            ? 'paso-actual'
+                            : 'paso-pendiente'
+                      }
+                    >
+                      {paso}
+                    </li>
+                  ))}
+                </ol>
+                {estado.accidente.siguientePaso && (
+                  <div className="paso-sugerido">
+                    Siguiente paso sugerido: <strong>{estado.accidente.siguientePaso}</strong>
+                  </div>
+                )}
+              </div>
+
+              <h2>Resumen clínico enviado al hospital</h2>
+              <div className="resumen-panel">
+                {estado.accidente.resumenClinico.length === 0 ? (
+                  <div className="resumen-vacio">Aún sin procedimientos registrados</div>
+                ) : (
+                  <ul>
+                    {estado.accidente.resumenClinico.map((paso, i) => (
+                      <li key={i}>{paso}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
           )}
 
           <h2>Ambulancias</h2>
@@ -219,7 +267,7 @@ function App() {
           {estado?.hospitales.map((h) => (
             <div key={h.nombre} className="hospital-card">
               <div className="nombre">{h.nombre}</div>
-              Camas libres: {h.camasLibres} · Especialista: {h.tieneEspecialista ? 'sí' : 'no'}
+              Camas libres: {h.camasLibres} · Especialidad: {h.especialidad}
               <span className={`badge ${h.estado}`}>{h.estado.replace('_', ' ')}</span>
             </div>
           ))}
